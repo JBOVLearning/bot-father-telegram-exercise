@@ -31,9 +31,14 @@ def webhook():
 # --- LÓGICA DEL BOT ---
 
 # Comando /start
+# @bot.message_handler(commands=['start'])
+# def send_welcome(message):
+#     bot.reply_to(message, "¡Hola! Soy tu bot funcional en Python. ¿En qué puedo ayudarte?")
+
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "¡Hola! Soy tu bot funcional en Python. ¿En qué puedo ayudarte?")
+    print("¡ALGUIEN ESCRIBIÓ /START!") # Esto saldrá en tus logs de Render
+    bot.reply_to(message, "¡Hola! Estoy vivo.")
 
 # Comando /buscar [nombre]
 @bot.message_handler(commands=['buscar'])
