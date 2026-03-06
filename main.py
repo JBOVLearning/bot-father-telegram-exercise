@@ -3,72 +3,112 @@ from flask import Flask, request
 import telebot
 from supabase import create_client, Client
 
-# Configuración de Variables (Se cargan desde la nube)
-TOKEN = os.getenv('TOKEN')
-URL = os.getenv('URL_APP')
+# ---------------- CONFIGURACIÓN ----------------
+
+TOKEN = os.getenv("TOKEN")
+URL = os.getenv("URL_APP")
+
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+if not TOKEN:
+    raise ValueError("TOKEN no definido en variables de entorno")
+
+if not URL:
+    raise ValueError("URL_APP no definida")
 
 # Inicialización
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
+
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# --- RUTAS DE WEBHOOK ---
-@app.route('/' + TOKEN, methods=['POST'])
-def getMessage():
-    json_string = request.get_data().decode('utf-8')
+# ---------------- WEBHOOK ----------------
+
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook():
+    json_string = request.get_data().decode("utf-8")
     update = telebot.types.Update.de_json(json_string)
     bot.process_new_updates([update])
-    return "!", 200
+    return "OK", 200
+
 
 @app.route("/")
-def webhook():
+def index():
     bot.remove_webhook()
-    bot.set_webhook(url=URL + TOKEN)
+    bot.set_webhook(url=f"{URL}/{TOKEN}")
     return "Bot funcionando correctamente", 200
 
-# --- LÓGICA DEL BOT ---
 
-# Comando /start
-# @bot.message_handler(commands=['start'])
-# def send_welcome(message):
-#     bot.reply_to(message, "¡Hola! Soy tu bot funcional en Python. ¿En qué puedo ayudarte?")
+# ---------------- BOT ----------------
 
-@bot.message_handler(commands=['start'])
+@bot.message_handler(commands=["start"])
 def send_welcome(message):
-    print("¡ALGUIEN ESCRIBIÓ /START!") # Esto saldrá en tus logs de Render
+    print("ALGUIEN ESCRIBIÓ /START")
     bot.reply_to(message, "¡Hola! Estoy vivo.")
 
-# Comando /buscar [nombre]
-@bot.message_handler(commands=['buscar'])
-def buscar_producto(message):
-    query_text = message.text.replace('/buscar ', '').strip()
 
-    if not query_text or query_text == '/buscar':
-        bot.reply_to(message, "⚠️ Por favor, escribe qué quieres buscar. Ej: `/buscar laptop`", parse_mode="Markdown")
+@bot.message_handler(commands=["buscar"])
+def buscar_producto(message):
+
+    parts = message.text.split(" ", 1)
+
+    if len(parts) < 2:
+        bot.reply_to(
+            message,
+            "⚠️ Escribe algo para buscar.\nEjemplo:\n`/buscar laptop`",
+            parse_mode="Markdown",
+        )
         return
 
+    query_text = parts[1].strip()
+
     try:
-        # Búsqueda en la tabla "productos" de Supabase
-        response = supabase.table("productos").select("*").ilike("nombre", f"%{query_text}%").execute()
-        data = response.data
+        response = (
+            supabase
+            .table("productos")
+            .select("*")
+            .ilike("nombre", f"%{query_text}%")
+            .execute()
+        )
 
-        if len(data) > 0:
-            respuesta = "🔍 **Resultados encontrados:**\n\n"
-            for item in data:
-                respuesta += f"📦 *{item['nombre']}*\n💰 Precio: ${item['precio']}\n🔢 Stock: {item['stock']}\n\n"
-            bot.reply_to(message, respuesta, parse_mode="Markdown")
-        else:
-            bot.reply_to(message, f"❌ No encontré nada relacionado con '{query_text}'.")
+        data = response.data or []
+
+        if len(data) == 0:
+            bot.reply_to(
+                message,
+                f"❌ No encontré resultados para: *{query_text}*",
+                parse_mode="Markdown",
+            )
+            return
+
+        respuesta = "🔍 *Resultados encontrados:*\n\n"
+
+        for item in data:
+            nombre = item.get("nombre", "Sin nombre")
+            precio = item.get("precio", "N/A")
+            stock = item.get("stock", "N/A")
+
+            respuesta += (
+                f"📦 *{nombre}*\n"
+                f"💰 Precio: ${precio}\n"
+                f"📦 Stock: {stock}\n\n"
+            )
+
+        bot.reply_to(message, respuesta, parse_mode="Markdown")
+
     except Exception as e:
-        bot.reply_to(message, "Error al conectar con la base de datos.")
-        print(f"Error: {e}")
+        print("Error Supabase:", e)
+        bot.reply_to(message, "⚠️ Error al consultar la base de datos.")
 
-# Respuesta por defecto (Echo)
+
 @bot.message_handler(func=lambda message: True)
 def echo_all(message):
     bot.reply_to(message, f"Me dijiste: {message.text}")
 
+
+# ---------------- SERVER ----------------
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
