@@ -35,10 +35,13 @@ def webhook():
 
 @app.route("/")
 def index():
+    return "Bot funcionando CORRECTAMENTE", 200
+
+@app.route("/setwebhook")
+def set_webhook():
     bot.remove_webhook()
     bot.set_webhook(url=f"{URL}/{TOKEN}")
-    return "Bot funcionando correctamente", 200
-
+    return "Webhook configurado", 200
 
 # ---------------- BOT ----------------
 
